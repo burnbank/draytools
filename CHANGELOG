@@ -1,3 +1,6 @@
+0.42b - 09.06.2013
+Detect if we support config or master password when extracting firmware
+
 0.41 - 30.11.2011
 Fixed some null-terminated credentials (rare occurrence)
 

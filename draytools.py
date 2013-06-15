@@ -32,7 +32,7 @@ from pydelzo import pydelzo, LZO_ERROR
 
 class draytools:
 	"""DrayTek Vigor password recovery, config & firmware tools"""
-	__version__ = "v0.41"
+	__version__ = "v0.42b"
 	copyright = \
 	"draytools Copyright (C) 2011 AMMOnium <ammonium at mail dot ru>"
 	
@@ -43,6 +43,9 @@ class draytools:
 	verbose = False
 	modelprint = True
 	force_smart_guess = True
+
+	atu = 'WAHOBXEZCLPDYTFQMJRVINSUGK'
+	atl = 'kgusnivrjmqftydplczexbohaw'
 
 	class fs:
 		"""Draytek filesystem utilities"""
@@ -94,7 +97,7 @@ class draytools:
 			if not self.test:
 				ff = file(nfname,'wb')
 			# perform extraction, some file types are not compressed
-			if fs>0:	
+			if fs > 0:	
 				if pp[-1].split('.')[-1].lower() \
 				in ['gif','jpg','cgi','cab','txt','jar']:
 					rawfdata = fdata
@@ -130,6 +133,14 @@ class draytools:
 				fs,rawfs = self.save_file(i)
 			return numfiles
 
+	@staticmethod
+	def is_supported(data):
+		"""Detect if we support config or master password when extracting firmware"""
+		if draytools.atu in data and draytools.atl in data:
+			print "Master key generator is supported for this firmware!"
+		else:
+			print "[WARN]:\tMaster key generator is NOT supported for this firmware!"
+			
 
 	@staticmethod
 	def v2k_checksum(data):
@@ -351,8 +362,6 @@ class draytools:
 	def spkeygen(mac):
 		"""Generate a master key like 'AbCdEfGh' from MAC address"""
 		# stupid translation from MIPS assembly, but works
-		atu = 'WAHOBXEZCLPDYTFQMJRVINSUGK'
-		atl = 'kgusnivrjmqftydplczexbohaw'
 		res = ['\x00'] * 8
 		st = [0] * 8
 		# compute 31*(31*(31*(31*(31*m0+m1)+m2)+m3)+m4)+m5, sign-extend mac bytes
@@ -384,9 +393,9 @@ class draytools:
 		v0 -= a3
 	#	v0 &= 0xFFFFFFFF
 		st[0] = a3
-		res[0] = atu[abs(v0)]
+		res[0] = self.atu[abs(v0)]
 		
-		for i in xrange(1,8):
+		for i in xrange(1, 8):
 			v1 = st[i-1]
 			a0 = ord(res[0])
 			t0 = ord(res[1])
@@ -424,9 +433,9 @@ class draytools:
 			a1 += v0
 			v0 &= 0xFFFFFFFF
 			if a0 == 0:
-				v1 = atu[abs(v0)]
+				v1 = self.atu[abs(v0)]
 			else:
-				v1 = atl[abs(v0)]
+				v1 = self.atl[abs(v0)]
 			res[i] = v1
 			v0 = 0
 		return ''.join(res)
@@ -473,7 +482,8 @@ To extract firmware and filesystem contents
 
 	parser.add_option('-o', '--output',
 		action="store", dest="outfile",
-		help="Output file name, %INPUTFILE%.out if omitted", default="")
+		help="Output file name, %INPUTFILE%.out if omitted", 
+		default="")
 
 	parser.add_option('-t', '--test',
 		action="store_true", dest="test", help=
@@ -482,21 +492,25 @@ To extract firmware and filesystem contents
 
 	parser.add_option('-v', '--verbose',
 		action="store_true", dest="verbose",
-		help="Verbose output", default=False)
+		help="Verbose output", 
+		default=False)
 
 # config file option group for cmdline option parser 
 
 	cfggroup.add_option('-c', '--config',
 		action="store_true", dest="config",
-		help="Decrypt and decompress config", default=False)
+		help="Decrypt and decompress config", 
+		default=False)
 
 	cfggroup.add_option('-d', '--decompress',
 		action="store_true", dest="decompress",
-		help="Decompress an unenrypted config file", default=False)
+		help="Decompress an unenrypted config file", 
+		default=False)
 
 	cfggroup.add_option('-y', '--decrypt',
 		action="store_true", dest="decrypt",
-		help="Decrypt config file", default=False)
+		help="Decrypt config file", 
+		default=False)
 
 	cfggroup.add_option('-p', '--password',
 		action="store_true", dest="password",
@@ -507,15 +521,18 @@ To extract firmware and filesystem contents
 
 	fwgroup.add_option('-f', '--firmware',
 		action="store_true", dest="firmware",
-		help="Decompress firmware", default=False)
+		help="Decompress firmware", 
+		default=False)
 
 	fwgroup.add_option('-F', '--firmware-all',
 		action="store_true", dest="fw_all",
-		help="Decompress firmware and extract filesystem", default=False)
+		help="Decompress firmware and extract filesystem", 
+		default=False)
 
 	fwgroup.add_option('-s', '--fs',
 		action="store_true", dest="fs",
-		help="Extract filesystem", default=False)
+		help="Extract filesystem", 
+		default=False)
 
 	fwgroup.add_option('-O', '--out-dir',
 		action="store", dest="outdir",
@@ -554,11 +571,11 @@ To extract firmware and filesystem contents
 
 	if len(args) > 1:
 		print '[ERR]:\tToo much arguments, only input file name expected'
-		print 'Run "draytools --help"'
+		print 'Run "draytools --help" to get help'
 		sys.exit(1)
 	elif len(args) < 1 and not options.mac:
 		print '[ERR]:\tInput file name expected'
-		print 'Run "draytools --help"'
+		print 'Run "draytools --help" to get help'
 		sys.exit(1)
 
 # open input file
@@ -662,7 +679,7 @@ To extract firmware and filesystem contents
 		except:
 			print '[ERR]:\tInput file corrupted or not supported'
 			sys.exit(3)
-
+		draytools.is_supported(outdata)
 		ol = len(outdata)
 		if not options.test:
 			outfile = file(outfname, 'wb')
@@ -681,6 +698,7 @@ To extract firmware and filesystem contents
 			print '[ERR]:\tInput file corrupted or not supported'
 			sys.exit(3)
 
+		draytools.is_supported(outdata)
 		ol = len(outdata)
 		if not options.test:
 			outfile = file(outfname, 'wb')
@@ -730,4 +748,4 @@ To extract firmware and filesystem contents
 		else:
 			print '[ERR]:\tPlease enter a valid MAC address, e.g '\
 			'00-11-22-33-44-55 or 00:DE:AD:BE:EF:00 or 1337babecafe'
-# EOF
+# EOF draytools.py
