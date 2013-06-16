@@ -39,6 +39,8 @@ class draytools:
 	CFG_RAW = 0
 	CFG_LZO = 1
 	CFG_ENC = 2
+	CFG_NEW = 3
+	CFG_NOT = -1
 
 	verbose = False
 	modelprint = True
@@ -140,6 +142,8 @@ class draytools:
 			print "Master key generator is supported for this firmware!"
 		else:
 			print "[WARN]:\tMaster key generator is NOT supported for this firmware!"
+		if 'sys_cfg_dev3' in data:
+			print "[WARN]:\tConfig file encryption is NOT yet supported for this firmware!"
 			
 
 	@staticmethod
@@ -225,12 +229,16 @@ class draytools:
 	def brute_cfg(data):
 		"""Check all possible keys until data looks like decrypted"""
 		rdata = None
-		key = 0
+		key = -1
 		for i in xrange(256):
 			rdata = draytools.decrypt(data, i)
 			if draytools.smart_guess(rdata) == draytools.CFG_LZO:
 				key = i
 				break
+		if key == -1:
+			if draytools.verbose:
+				print 'Bruteforce failed'
+			raise Exception('Could not decrypt the config file')
 		if draytools.verbose:
 			print 'Found key:\t[0x%02X]' % key
 		return rdata
@@ -246,6 +254,8 @@ class draytools:
 		ckey = draytools.make_key(modelstr)
 		rdata = draytools.decrypt(data[0x100:], ckey)
 		# if the decrypted data does not look good, bruteforce
+		if draytools.verbose:
+			print 'Trying bruteforce'
 		if draytools.smart_guess(rdata) != draytools.CFG_LZO:
 			rdata = draytools.brute_cfg(data[0x100:])
 		elif draytools.verbose:
@@ -261,28 +271,40 @@ class draytools:
 
 	@staticmethod
 	def guess(data):
-		"""Return CFG type - raw(0), compressed(1), encrypted(2)"""
+		"""Return CFG type - raw(0), compressed(1), encrypted(2), new encrypted(3)"""
 		return ord(data[0x2D])
 
 	@staticmethod
-	def smart_guess(data):
+	def smart_guess(data, header=False):
 		"""Guess is the cfg block compressed or not"""
+		if header:
+			has_signature = (data[0x20:0x24] == '\x12\x34\x56\x78')
+			if not has_signature:
+				return draytools.CFG_NOT
+		
+		init_guess = draytools.guess(data)
 		# Uncompressed block is large and has low entropy
 		if draytools.entropy(data) < 1.0 or len(data) > 0x10000:
  			return draytools.CFG_RAW
 		# Compressed block still has pieces of cleartext at the beginning
 		if "Vigor" in data and ("Series" in data or "draytek" in data):
 			return draytools.CFG_LZO
-		return draytools.CFG_ENC
+		# Else we definitely have either new (since 2012) or old encryption
+		return max(draytools.CFG_ENC, header and init_guess or draytools.CFG_NOT)
 
 	@staticmethod
 	def de_cfg(data):
 		"""Get raw config data from raw /compressed/encrypted & comressed"""
 		if draytools.force_smart_guess:
-			g = draytools.smart_guess(data)
+			g = draytools.smart_guess(data,True)
 		else:
 			g = draytools.guess(data)
-		if g == draytools.CFG_RAW:
+
+		if g == draytools.CFG_NOT:
+			if draytools.verbose:
+				print 'File is  :\tnot a config file'
+			return g, data
+		elif g == draytools.CFG_RAW:
 			if draytools.verbose:
 				print 'File is  :\tnot compressed, not encrypted'
 			return g, data
@@ -292,8 +314,12 @@ class draytools:
 			return g, draytools.decompress_cfg(data)
 		elif g == draytools.CFG_ENC:
 			if draytools.verbose:
-				print 'File is  :\tcompressed, encrypted'
+				print 'File is  :\tcompressed, encrypted (old)'
 			return g, draytools.decompress_cfg(draytools.decrypt_cfg(data))
+		elif g == draytools.CFG_NEW:
+			if draytools.verbose:
+				print 'File is  :\tcompressed, encrypted (new)'
+			raise Exception('New encryption (since 2012) is not supported yet :(')
 
 	@staticmethod
 	def decompress_firmware(data):
