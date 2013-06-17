@@ -142,7 +142,7 @@ class draytools:
 			print "Master key generator is supported for this firmware!"
 		else:
 			print "[WARN]:\tMaster key generator is NOT supported for this firmware!"
-		if 'sys_cfg_dev3' in data:
+		if 'sys_cfg_dev3' in data and 'sys_cfg_env3' in data:
 			print "[WARN]:\tConfig file encryption is NOT yet supported for this firmware!"
 			
 
