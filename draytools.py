@@ -54,7 +54,10 @@ class draytools:
 	trans_36 = "".join(chr(x ^ 0x36) for x in xrange(256))
 	blocksize = md5().block_size
 
-	cfg3_hmac_key = "\x67\x56\x67\x23\x12\x54"
+# V2850 3.6.1, 3.6.4
+#	cfg3_hmac_key = "\x67\x56\x67\x23\x12\x54"
+# V2830 3.6.1, 3.6.4
+	cfg3_hmac_key = "\xAA\x33\x30\x31\x32\x39"
 
 	class fs:
 		"""Draytek filesystem utilities"""
@@ -193,6 +196,36 @@ class draytools:
 		o_key_pad = key.translate(draytools.trans_5C)
 		i_key_pad = key.translate(draytools.trans_36)
 		return md5(o_key_pad + md5(i_key_pad + msg).digest())
+
+	@staticmethod 
+	def prepare_cfg3_crypto_seed(seed, modelstr):
+		"""Make a crypto seed foir cfg_v3 from modelstr and constant seed"""
+		return seed[0] + modelstr[1] + seed[2] + modelstr[3:]
+
+	@staticmethod
+	def decrypt_cfg_v3(data):
+		"""Decrypt a config file using cfg_v3 aglorithm"""
+		modelstr = "V" + format(unpack(">H", 
+			draytools.get_modelid(data))[0],"04X")
+		tmsg = prepare_cfg3_crypto_seed(draytools.cfg3_hmac_key, modelstr)
+		thash = hmac_md5(draytools.cfg3_hmac_key, tmsg)
+		# construct three word keys from hash
+		raise Exception('TODO!')
+		return
+
+	@staticmethod
+	def decrypt_v3(data, key):
+		"""Decrypt a data block using give key"""
+		raise Exception('TODO!')
+		return
+
+
+	@staticmethod
+	def find_cfg3_hmac_key(data):
+		"""Find a key for CFG V3 encryption inside firmware"""
+		dummy_string = "IP Filter: v3.3.1"
+		raise Exception('TODO!')
+		return
 
 	@staticmethod
 	def decompress_cfg(data):
