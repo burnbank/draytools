@@ -29,6 +29,7 @@ from collections import defaultdict
 
 from pydelzo import pydelzo, LZO_ERROR
 
+from hashlib import md5
 
 class draytools:
 	"""DrayTek Vigor password recovery, config & firmware tools"""
@@ -48,6 +49,12 @@ class draytools:
 
 	atu = 'WAHOBXEZCLPDYTFQMJRVINSUGK'
 	atl = 'kgusnivrjmqftydplczexbohaw'
+
+	trans_5C = "".join(chr(x ^ 0x5c) for x in xrange(256))
+	trans_36 = "".join(chr(x ^ 0x36) for x in xrange(256))
+	blocksize = md5().block_size
+
+	cfg3_hmac_key = "\x67\x56\x67\x23\x12\x54"
 
 	class fs:
 		"""Draytek filesystem utilities"""
@@ -177,6 +184,16 @@ class draytools:
 		modelid = data[0x0C:0x0E]
 		return modelid
 
+	@staticmethod 
+	def hmac_md5(key, msg):
+		"""Generate a HMAC-MD5 (RFC2104)"""
+		if len(key) > draytools.blocksize:
+			key = md5(key).digest()
+		key += chr(0) * (draytools.blocksize - len(key))
+		o_key_pad = key.translate(draytools.trans_5C)
+		i_key_pad = key.translate(draytools.trans_36)
+		return md5(o_key_pad + md5(i_key_pad + msg).digest())
+
 	@staticmethod
 	def decompress_cfg(data):
 		"""Decompress a config file"""
@@ -203,6 +220,7 @@ class draytools:
 
 	@staticmethod
 	def enc(c, key):
+		"""Encrypt a byte using old cfg_v2 algorithm"""
 		c ^= key
 		c -= key
 		c = 0xFF & (c >> 5 | c << 3)
@@ -210,6 +228,7 @@ class draytools:
 
 	@staticmethod
 	def dec(c, key):
+		"""Decrypt a byte using old cfg_v2 algorithm"""
 		c = (c << 5 | c >> 3)
 		c += key
 		c ^= key
@@ -218,7 +237,7 @@ class draytools:
 
 	@staticmethod
 	def decrypt(data, key):
-		"""Decrypt a block of data using given key"""
+		"""Decrypt a block of data using given key and cfg_v2 aglorithm"""
 		rdata = ''
 		for i in xrange(len(data)):
 			rdata += chr(draytools.dec(ord(data[i]), key))
