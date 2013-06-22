@@ -29,7 +29,8 @@ from collections import defaultdict
 
 from pydelzo import pydelzo, LZO_ERROR
 
-from hashlib import md5
+#from hashlib import md5
+import hmac
 
 class draytools:
 	"""DrayTek Vigor password recovery, config & firmware tools"""
@@ -50,9 +51,9 @@ class draytools:
 	atu = 'WAHOBXEZCLPDYTFQMJRVINSUGK'
 	atl = 'kgusnivrjmqftydplczexbohaw'
 
-	trans_5C = "".join(chr(x ^ 0x5c) for x in xrange(256))
-	trans_36 = "".join(chr(x ^ 0x36) for x in xrange(256))
-	blocksize = md5().block_size
+#	trans_5C = "".join(chr(x ^ 0x5c) for x in xrange(256))
+#	trans_36 = "".join(chr(x ^ 0x36) for x in xrange(256))
+#	blocksize = md5().block_size
 
 # V2850 3.6.1, 3.6.4
 #	cfg3_hmac_key = "\x67\x56\x67\x23\x12\x54"
@@ -189,13 +190,14 @@ class draytools:
 
 	@staticmethod 
 	def hmac_md5(key, msg):
-		"""Generate a HMAC-MD5 (RFC2104)"""
-		if len(key) > draytools.blocksize:
-			key = md5(key).digest()
-		key += chr(0) * (draytools.blocksize - len(key))
-		o_key_pad = key.translate(draytools.trans_5C)
-		i_key_pad = key.translate(draytools.trans_36)
-		return md5(o_key_pad + md5(i_key_pad + msg).digest())
+		return unhexlify(hmac.new(key, msg).hexdigest())
+#		"""Generate a HMAC-MD5 (RFC2104)"""
+#		if len(key) > draytools.blocksize:
+#			key = md5(key).digest()
+#		key += chr(0) * (draytools.blocksize - len(key))
+#		o_key_pad = key.translate(draytools.trans_5C)
+#		i_key_pad = key.translate(draytools.trans_36)
+#		return md5(o_key_pad + md5(i_key_pad + msg).digest())
 
 	@staticmethod 
 	def prepare_cfg3_crypto_seed(seed, modelstr):
@@ -207,17 +209,72 @@ class draytools:
 		"""Decrypt a config file using cfg_v3 aglorithm"""
 		modelstr = "V" + format(unpack(">H", 
 			draytools.get_modelid(data))[0],"04X")
-		tmsg = prepare_cfg3_crypto_seed(draytools.cfg3_hmac_key, modelstr)
-		thash = hmac_md5(draytools.cfg3_hmac_key, tmsg)
-		# construct three word keys from hash
-		raise Exception('TODO!')
+
+		if draytools.verbose:
+			print 'Model is :\t' + modelstr
+			draytools.modelprint = False
+
+		rdata = data[0x100:]
+
+		tmsg = draytools.prepare_cfg3_crypto_seed(draytools.cfg3_hmac_key, modelstr)
+		thash = draytools.hmac_md5(draytools.cfg3_hmac_key, tmsg)
+		print hexlify(thash)
+		thash = thash[:8]
+		print
+		print hexlify(thash)
+		# construct the three word keys from hash
+		#v0 t1 a0 a3 t0 v1 a1 a2
+		#
+		#t2 = v1|a1|a2|t0
+		#t0 = v0|a0|a3|t1
+		#t3 = NOT nvl(t0,t2)		
+		key_1 = unpack('>L', thash[-3:] + thash[4])[0]
+		print '0x%08.8X' % (key_1) 
+		key_2 = unpack('>L', thash[0] + thash[2:4] + thash[1])[0]
+		print '0x%08.8X' % (key_2)
+		key_3 = not key_2 and key_1 or key_2
+		print '0x%08.8X' % (key_3)
+		key_3 = ~key_3 & 0xFFFFFFFF
+		print '0x%08.8X' % (key_3)
+		print 
+		accum = 0
+		
+		datalenword	= 1 #int(len(rdata)/4)
+			
+		for i in xrange(datalenword):
+			cword = rdata[i*4 : (i+1)*4]
+#			print hexlify(cword)
+			cint = unpack('>L',cword)[0]
+			print 'Encrypted:\t0x%08.8X' % (cint) 
+
+			accum =  (accum + key_3) & 0xFFFFFFFF
+
+			tmp_1 =  (cint  << 24)   & 0xFF000000
+			tmp_2 =  (cint  >> 8)    & 0x00FFFFFF
+			tmp_3 = ~(tmp_1 | tmp_2)
+			tmp_4 =  (tmp_3 + accum) & 0xFFFFFFFF
+			tmp_5 =  (tmp_4 ^ key_1)
+			tmp_6 =  (tmp_5 - key_2) & 0xFFFFFFFF
+
+			res = tmp_6
+
+			print
+			print 'Decrypted:\t0x%08.8X' % (res) 
+
+			good = 0x07030000										
+			print 'Plaintext:\t0x%08.8X' % (good) 
+			print good == res and '!!!SUCCESS!!!' or 'fail'
+			
+
+#		raise Exception('TODO!')
+		sys.exit(-1)
 		return
 
-	@staticmethod
-	def decrypt_v3(data, key):
-		"""Decrypt a data block using give key"""
-		raise Exception('TODO!')
-		return
+#	@staticmethod
+#	def decrypt_v3(data, key):
+#		"""Decrypt a data block using give key"""
+#		raise Exception('TODO!')
+#		return
 
 
 	@staticmethod
@@ -371,7 +428,8 @@ class draytools:
 		elif g == draytools.CFG_NEW:
 			if draytools.verbose:
 				print 'File is  :\tcompressed, encrypted (new)'
-			raise Exception('New encryption (since 2012) is not supported yet :(')
+			return g, draytools.decompress_cfg(draytools.decrypt_cfg_v3(data))
+#			raise Exception('New encryption (since 2012) is not supported yet :(')
 
 	@staticmethod
 	def decompress_firmware(data):
