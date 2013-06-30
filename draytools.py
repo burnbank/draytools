@@ -202,7 +202,7 @@ class draytools:
 	@staticmethod 
 	def prepare_cfg3_crypto_seed(seed, modelstr):
 		"""Make a crypto seed foir cfg_v3 from modelstr and constant seed"""
-		return seed[0] + modelstr[1] + seed[2] + modelstr[3:]
+		return seed[0] + modelstr[1] + seed[5] + modelstr[3:]
 
 	@staticmethod
 	def decrypt_cfg_v3(data):
